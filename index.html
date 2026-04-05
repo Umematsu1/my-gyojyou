@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>8ページメモ帳（分割入力・固定版）</title>
+    <style>
+        body { font-family: sans-serif; background-color: #f0f0f0; padding: 10px; margin: 0; }
+        .controls { background: #ddd; padding: 10px; border-radius: 5px; position: sticky; top: 0; z-index: 100; margin-bottom: 10px; }
+        .row { display: flex; gap: 5px; margin-bottom: 8px; align-items: center; flex-wrap: wrap; }
+        select, .btn { padding: 8px; font-size: 15px; border: 1px solid #999; background: white; border-radius: 4px; cursor: pointer; }
+        .color-btn { width: 35px; height: 35px; border: 2px solid #fff; border-radius: 4px; cursor: pointer; }
+        .active-color { border: 3px solid #333 !important; }
+        .mode-btn { font-weight: bold; }
+        .active-draw { background: #FF9800 !important; color: white; }
+        .active-erase { background: #f44336 !important; color: white; }
+
+        .page { background: white; border: 2px solid #333; padding: 15px; min-height: 600px; display: none; }
+        .active { display: block; }
+        
+        .slot { border: 1px solid black; width: 100%; height: 60px; margin-bottom: 8px; background: white; display: flex; position: relative; }
+        
+        /* 各入力欄のスタイル */
+        .slot-input { 
+            height: 100%; border: none; font-size: 16px; padding: 4px; 
+            box-sizing: border-box; resize: none; line-height: 1.3; 
+            background: transparent; font-family: sans-serif; flex-shrink: 0;
+        }
+        
+        /* 縦線のスタイル（太さを4pxに固定） */
+        .divider { width: 4px; height: 100%; background: black; cursor: pointer; flex-shrink: 0; }
+    </style>
+</head>
+<body>
+
+<div class="controls">
+    <div class="row">
+        <select id="pageSelect" onchange="changePage()">
+            <option value="0">1ページ目</option><option value="1">2ページ目</option>
+            <option value="2">3ページ目</option><option value="3">4ページ目</option>
+            <option value="4">5ページ目</option><option value="5">6ページ目</option>
+        </select>
+        <button class="btn" onclick="saveData()" style="background:#4CAF50; color:white; font-weight:bold; margin-left:auto;">保存</button>
+    </div>
+    <div class="row">
+        <div class="color-btn active-color" style="background:black;" onclick="setMode('text', 'black', this)"></div>
+        <div class="color-btn" style="background:red;" onclick="setMode('text', 'red', this)"></div>
+        <div class="color-btn" style="background:blue;" onclick="setMode('text', 'blue', this)"></div>
+        <div class="color-btn" style="background:green;" onclick="setMode('text', 'green', this)"></div>
+        <button id="drawBtn" class="btn mode-btn" onclick="setMode('draw')">ペン(分割)</button>
+        <button id="eraseBtn" class="btn mode-btn" onclick="setMode('erase')">消しゴム</button>
+    </div>
+</div>
+
+<div id="app"></div>
+
+<script>
+    var currentMode = 'text';
+    var selectedColor = 'black';
+
+    function setMode(mode, color, btn) {
+        currentMode = mode;
+        if (color) selectedColor = color;
+        document.querySelectorAll('.color-btn, .mode-btn').forEach(el => el.classList.remove('active-color', 'active-draw', 'active-erase'));
+        if (mode === 'text' && btn) btn.classList.add('active-color');
+        if (mode === 'draw') document.getElementById('drawBtn').classList.add('active-draw');
+        if (mode === 'erase') document.getElementById('eraseBtn').classList.add('active-erase');
+    }
+
+    // 入力欄をクリックした時の処理
+    function handleInputClick(e, el) {
+        if (currentMode === 'text') {
+            el.style.color = selectedColor;
+        } else if (currentMode === 'draw') {
+            const rect = el.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const totalWidth = rect.width;
+
+            // 1. 今のtextareaの幅を2つに分ける計算
+            const leftWidth = clickX;
+            const rightWidth = totalWidth - clickX - 4; // 4は線の太さ
+
+            // 2. 新しい縦線を作成
+            const newDivider = createDivider();
+            
+            // 3. 新しい入力欄を作成
+            const newInput = createTextarea("");
+            newInput.style.width = rightWidth + "px";
+            
+            // 4. 元の入力欄の幅を固定
+            el.style.width = leftWidth + "px";
+            el.style.flex = "none"; // 自動伸縮をオフにする
+
+            el.after(newDivider, newInput);
+        }
+    }
+
+    function createTextarea(val, color, width) {
+        const txt = document.createElement('textarea');
+        txt.className = 'slot-input';
+        txt.value = val || "";
+        if (color) txt.style.color = color;
+        if (width) {
+            txt.style.width = width;
+            txt.style.flex = "none";
+        } else {
+            txt.style.flex = "1"; // 最初は全幅
+        }
+        txt.onclick = function(e) { handleInputClick(e, this); };
+        return txt;
+    }
+
+    function createDivider() {
+        const div = document.createElement('div');
+        div.className = 'divider';
+        div.onclick = function() {
+            if (currentMode === 'erase') {
+                // 消すときは右隣の入力欄を削除し、左側の幅を広げる
+                const prevInput = this.previousSibling;
+                const nextInput = this.nextSibling;
+                if (prevInput && nextInput) {
+                    const newWidth = prevInput.offsetWidth + nextInput.offsetWidth + 4;
+                    prevInput.style.width = newWidth + "px";
+                    nextInput.remove();
+                    this.remove();
+                }
+            }
+        };
+        return div;
+    }
+
+    // ページ生成
+    const app = document.getElementById('app');
+    for (let p = 0; p < 6; p++) {
+        const pageDiv = document.createElement('div');
+        pageDiv.id = `page-${p}`;
+        pageDiv.className = `page ${p === 0 ? 'active' : ''}`;
+        
+        // タイトル
+        const titleWrap = document.createElement('div');
+        titleWrap.style = "border:1px solid black; width:130px; height:30px; margin-bottom:15px;";
+        titleWrap.innerHTML = `<input type="text" class="title-input" style="width:100%;height:100%;border:none;text-align:center;" placeholder="タイトル" onclick="this.style.color=selectedColor">`;
+        pageDiv.appendChild(titleWrap);
+
+        // スロット
+        for (let s = 0; s < 8; s++) {
+            const slot = document.createElement('div');
+            slot.className = 'slot';
+            slot.id = `slot-${p}-${s}`;
+            slot.appendChild(createTextarea());
+            pageDiv.appendChild(slot);
+        }
+        app.appendChild(pageDiv);
+    }
+
+    function changePage() {
+        var v = document.getElementById('pageSelect').value;
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.getElementById('page-' + v).classList.add('active');
+    }
+
+    function saveData() {
+        const data = [];
+        document.querySelectorAll('.page').forEach(page => {
+            const pageData = { title: page.querySelector('.title-input').value, slots: [] };
+            page.querySelectorAll('.slot').forEach(slot => {
+                const slotContent = [];
+                slot.childNodes.forEach(node => {
+                    if (node.classList.contains('slot-input')) {
+                        slotContent.push({ type: 'text', val: node.value, col: node.style.color, w: node.style.width });
+                    } else if (node.classList.contains('divider')) {
+                        slotContent.push({ type: 'line' });
+                    }
+                });
+                pageData.slots.push(slotContent);
+            });
+            data.push(pageData);
+        });
+        localStorage.setItem('memo_v8_split_final', JSON.stringify(data));
+        alert('保存しました');
+    }
+
+    window.onload = function() {
+        const s = localStorage.getItem('memo_v8_split_final');
+        if (!s) return;
+        const data = JSON.parse(s);
+        data.forEach((pageData, pIdx) => {
+            const page = document.getElementById(`page-${pIdx}`);
+            if (!page) return;
+            page.querySelector('.title-input').value = pageData.title || "";
+            const slots = page.querySelectorAll('.slot');
+            pageData.slots.forEach((slotContent, sIdx) => {
+                if (!slots[sIdx]) return;
+                const slot = slots[sIdx];
+                slot.innerHTML = '';
+                slotContent.forEach(item => {
+                    if (item.type === 'text') {
+                        slot.appendChild(createTextarea(item.val, item.col, item.w));
+                    } else {
+                        slot.appendChild(createDivider());
+                    }
+                });
+            });
+        });
+    };
+</script>
+</body>
+</html>
